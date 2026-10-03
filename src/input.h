@@ -28,6 +28,8 @@ typedef struct {
     void *userdata;
 } wayhud_input_t;
 
+int wayhud_input_open_devices(wayhud_input_t *in);
+int wayhud_input_setup_xkb(wayhud_input_t *in, wayhud_callback_t cb, void *userdata);
 int wayhud_input_init(wayhud_input_t *in, wayhud_callback_t cb, void *userdata);
 void wayhud_input_destroy(wayhud_input_t *in);
 int wayhud_input_poll_fds(wayhud_input_t *in, int *out_fds, int max_fds);

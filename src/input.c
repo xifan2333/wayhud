@@ -52,31 +52,11 @@ static const char *clean_key_name(xkb_keysym_t sym, char *buf, size_t buf_size) 
     return buf;
 }
 
-int wayhud_input_init(wayhud_input_t *in, wayhud_callback_t cb, void *userdata) {
-    memset(in, 0, sizeof(*in));
-    in->on_key = cb;
-    in->userdata = userdata;
-
-    in->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (!in->xkb_ctx) {
-        fprintf(stderr, "wayhud: failed to create xkb context\n");
-        return -1;
+int wayhud_input_open_devices(wayhud_input_t *in) {
+    for (int i = 0; i < MAX_DEVICES; i++) {
+        in->fds[i] = -1;
     }
-
-    in->xkb_map = xkb_keymap_new_from_names(in->xkb_ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    if (!in->xkb_map) {
-        fprintf(stderr, "wayhud: failed to compile system keymap\n");
-        xkb_context_unref(in->xkb_ctx);
-        return -1;
-    }
-
-    in->xkb_st = xkb_state_new(in->xkb_map);
-    if (!in->xkb_st) {
-        fprintf(stderr, "wayhud: failed to create xkb state\n");
-        xkb_keymap_unref(in->xkb_map);
-        xkb_context_unref(in->xkb_ctx);
-        return -1;
-    }
+    in->count = 0;
 
     DIR *dir = opendir("/dev/input");
     if (!dir) {
@@ -119,6 +99,45 @@ int wayhud_input_init(wayhud_input_t *in, wayhud_callback_t cb, void *userdata) 
     return in->count > 0 ? 0 : -1;
 }
 
+int wayhud_input_setup_xkb(wayhud_input_t *in, wayhud_callback_t cb, void *userdata) {
+    in->on_key = cb;
+    in->userdata = userdata;
+
+    in->xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!in->xkb_ctx) {
+        fprintf(stderr, "wayhud: failed to create xkb context\n");
+        return -1;
+    }
+
+    in->xkb_map = xkb_keymap_new_from_names(in->xkb_ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (!in->xkb_map) {
+        fprintf(stderr, "wayhud: failed to compile system keymap\n");
+        xkb_context_unref(in->xkb_ctx);
+        in->xkb_ctx = NULL;
+        return -1;
+    }
+
+    in->xkb_st = xkb_state_new(in->xkb_map);
+    if (!in->xkb_st) {
+        fprintf(stderr, "wayhud: failed to create xkb state\n");
+        xkb_keymap_unref(in->xkb_map);
+        in->xkb_map = NULL;
+        xkb_context_unref(in->xkb_ctx);
+        in->xkb_ctx = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+int wayhud_input_init(wayhud_input_t *in, wayhud_callback_t cb, void *userdata) {
+    memset(in, 0, sizeof(*in));
+    if (wayhud_input_open_devices(in) != 0) {
+        return -1;
+    }
+    return wayhud_input_setup_xkb(in, cb, userdata);
+}
+
 void wayhud_input_destroy(wayhud_input_t *in) {
     for (int i = 0; i < in->count; i++) {
         if (in->fds[i] >= 0) {
@@ -128,9 +147,18 @@ void wayhud_input_destroy(wayhud_input_t *in) {
     }
     in->count = 0;
 
-    if (in->xkb_st) xkb_state_unref(in->xkb_st);
-    if (in->xkb_map) xkb_keymap_unref(in->xkb_map);
-    if (in->xkb_ctx) xkb_context_unref(in->xkb_ctx);
+    if (in->xkb_st) {
+        xkb_state_unref(in->xkb_st);
+        in->xkb_st = NULL;
+    }
+    if (in->xkb_map) {
+        xkb_keymap_unref(in->xkb_map);
+        in->xkb_map = NULL;
+    }
+    if (in->xkb_ctx) {
+        xkb_context_unref(in->xkb_ctx);
+        in->xkb_ctx = NULL;
+    }
 }
 
 int wayhud_input_poll_fds(wayhud_input_t *in, int *out_fds, int max_fds) {

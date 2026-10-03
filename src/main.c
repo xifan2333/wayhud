@@ -3,7 +3,9 @@
 #include "input.h"
 #include "render.h"
 #include "style.h"
+#include <errno.h>
 #include <getopt.h>
+#include <grp.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -140,6 +142,41 @@ static void on_wayland_socket_event(wayhud_app_t *app, int fd, uint32_t revents)
     wayhud_render_dispatch(&app->render);
 }
 
+static int drop_privileges(void) {
+    uid_t real_uid = getuid();
+    gid_t real_gid = getgid();
+
+    /* If running unprivileged (euid == uid), nothing to drop */
+    if (geteuid() == real_uid && getegid() == real_gid) {
+        return 0;
+    }
+
+    /* Drop supplementary groups */
+    if (setgroups(1, &real_gid) != 0) {
+        /* Non-fatal if we lack CAP_SETGID */
+    }
+
+    /* Permanently drop GID */
+    if (setresgid(real_gid, real_gid, real_gid) != 0) {
+        fprintf(stderr, "wayhud: failed to drop GID privileges: %s\n", strerror(errno));
+        return -1;
+    }
+
+    /* Permanently drop UID */
+    if (setresuid(real_uid, real_uid, real_uid) != 0) {
+        fprintf(stderr, "wayhud: failed to drop UID privileges: %s\n", strerror(errno));
+        return -1;
+    }
+
+    /* Verify privileges have been permanently dropped */
+    if (geteuid() != real_uid || getegid() != real_gid) {
+        fprintf(stderr, "wayhud: security check failed: unable to permanently drop privileges\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 /* --- Application Lifecycle --- */
 
 static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
@@ -176,6 +213,41 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
         }
     }
 
+    struct stat in_stat;
+    app->has_pipe_in = (fstat(STDIN_FILENO, &in_stat) == 0 &&
+                        (S_ISFIFO(in_stat.st_mode) || S_ISREG(in_stat.st_mode)));
+    app->has_pipe_out = !isatty(STDOUT_FILENO);
+
+    /* 1. Open hardware input devices early while elevated privileges (if any) are active */
+    if (!app->has_pipe_in) {
+        if (wayhud_input_open_devices(&app->input) != 0) {
+            /* Open may fail if unprivileged; drop_privileges is called regardless */
+        }
+    }
+
+    /* 2. Permanently drop all elevated privileges immediately after opening devices */
+    if (drop_privileges() != 0) {
+        if (!app->has_pipe_in) {
+            wayhud_input_destroy(&app->input);
+        }
+        return -1;
+    }
+
+    /* 3. Validate input devices if in standalone keycaster mode */
+    if (!app->has_pipe_in) {
+        if (app->input.count == 0) {
+            fprintf(stderr, "wayhud: cannot access keyboard devices under /dev/input\n"
+                            "Hint: Install with SUID (sudo make install-suid), file capabilities,\n"
+                            "or add user to the 'input' group.\n");
+            return -1;
+        }
+        if (wayhud_input_setup_xkb(&app->input, on_hardware_key_event, app) != 0) {
+            wayhud_input_destroy(&app->input);
+            return -1;
+        }
+    }
+
+    /* 4. Load stylesheet as unprivileged user */
     if (style_arg) {
         if (strchr(style_arg, '{')) {
             wayhud_style_parse(&app->style, style_arg, instance_name);
@@ -186,26 +258,15 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
         wayhud_style_load_file(&app->style, NULL, instance_name);
     }
 
-    struct stat in_stat;
-    app->has_pipe_in = (fstat(STDIN_FILENO, &in_stat) == 0 &&
-                        (S_ISFIFO(in_stat.st_mode) || S_ISREG(in_stat.st_mode)));
-    app->has_pipe_out = !isatty(STDOUT_FILENO);
-
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
 
+    /* 5. Connect to Wayland and initialize renderer */
     if (wayhud_render_init(&app->render, &app->style) != 0) {
-        return -1;
-    }
-
-    if (!app->has_pipe_in) {
-        if (wayhud_input_init(&app->input, on_hardware_key_event, app) != 0) {
-            fprintf(stderr, "wayhud: cannot access keyboard devices under /dev/input\n"
-                            "Hint: Ensure your user is in the 'input' group or run with "
-                            "appropriate permissions.\n");
-            wayhud_render_destroy(&app->render);
-            return -1;
+        if (!app->has_pipe_in) {
+            wayhud_input_destroy(&app->input);
         }
+        return -1;
     }
 
     return 0;

@@ -24,9 +24,16 @@ sudo make install
 
 This installs the binary and the `wayhud(1)` man page into standard system directories.
 
-If your user is not yet in the `input` group, you can install with the setuid bit:
+### Privilege Management (No `input` group required)
+
+To read hardware keystrokes without adding your user account to the `input` group, `wayhud` implements **secure early privilege dropping**: it opens hardware event descriptors at startup, then permanently drops all elevated privileges back to the invoking user before connecting to Wayland or parsing user stylesheets:
+
 ```bash
+# Option A: SUID root with automatic privilege dropping (Recommended)
 sudo make install-suid
+
+# Option B: Linux File Capabilities (read-only without SUID)
+sudo make install-caps
 ```
 
 ## Usage

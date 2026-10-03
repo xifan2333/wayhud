@@ -73,6 +73,9 @@ install-suid: $(BIN)
 	install -d $(DESTDIR)$(MANDIR)/man1
 	install -m 644 man/wayhud.1 $(DESTDIR)$(MANDIR)/man1/wayhud.1
 
+install-caps: install
+	setcap cap_dac_read_search+ep $(DESTDIR)$(BINDIR)/$(TARGET)
+
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
 	rm -f $(DESTDIR)$(MANDIR)/man1/wayhud.1
@@ -83,4 +86,4 @@ lint: $(PROTO_HEADERS)
 format:
 	hk fix --all
 
-.PHONY: all clean install install-suid uninstall lint format proto
+.PHONY: all clean install install-suid install-caps uninstall lint format proto
