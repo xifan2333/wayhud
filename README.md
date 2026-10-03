@@ -1,20 +1,19 @@
 # wayhud
 
-Universal, modern suckless Wayland on-screen HUD (Heads-Up Display).
+Universal, modern suckless Wayland on-screen HUD (Heads-Up Display) styled with pure **GTK CSS**.
 
 Built for Wayland compositors supporting `wlr-layer-shell-unstable-v1` (River, Sway, Hyprland, Niri).
 
 ## Philosophy
 
-- **KISS & Pure C**: Minimalist architecture, < 50KB binary, ~8MB memory footprint, < 2ms startup.
-- **Modern Suckless**: Direct `wayland-client` + `wlr-layer-shell` (Version 4) + Cairo/Pango rendering.
+- **KISS & Pure C**: Minimalist architecture, < 60KB binary, ~8MB memory footprint, < 2ms startup.
+- **Pure GTK CSS**: Styled directly through standard GTK CSS (`~/.config/wayhud/style.css`), no ugly custom flags.
+- **Smart Key Multiplier**: Automatically collapses rapid repetitive keystrokes into clean multipliers (e.g. `Backspace × 4`).
 - **Pipeline Native (POSIX `isatty`)**:
   - `... | wayhud`: Automatically senses stdin pipe and acts as an on-screen text/status HUD.
-  - `wayhud | ...`: Automatically streams captured keystroke combos to stdout.
+  - `wayhud | ...`: Automatically streams captured keys to stdout.
   - `wayhud`: Standalone on-screen key HUD / keycaster reading hardware `/dev/input/`.
 - **100% Intangible**: Fully click-through (empty input region) and zero focus stealing (`keyboard_mode = none`).
-- **Independent Margins**: Supports independent bottom and left positioning (`-m 195,4` to sit perfectly above webcam PIP).
-- **Precise Width Truncation**: Enforces max pixel width (`-w 185`) so it never extends past custom borders or sidebars.
 
 ## Installation
 
@@ -31,29 +30,72 @@ sudo make install-suid
 ## Usage
 
 ```bash
-# 1. Standalone Keycaster (default: bottom-left, width 185px, margin 195,4)
+# 1. Standalone Keycaster with default ~/.config/wayhud/style.css
 wayhud
 
 # 2. Universal Text HUD / OSD via Unix pipe
 echo "Volume: 80%" | wayhud
-echo "Build Completed!" | wayhud -a top-right -m 20,20 -c "#9ece6a"
+echo "Build Completed!" | wayhud -s "window { margin-top: 20px; margin-right: 20px; } label { color: #9ece6a; }"
 
 # 3. Stream captured keys to log or pipeline
 wayhud | grep "Super"
 ```
 
+## GTK CSS Configuration
+
+`wayhud` looks for `~/.config/wayhud/style.css` (or `$XDG_CONFIG_HOME/wayhud/style.css`) by default:
+
+```css
+window {
+    /* Positioning via standard GTK CSS margins */
+    margin-bottom: 195px;
+    margin-left: 4px;
+
+    /* Box Model */
+    max-width: 220px;
+    padding: 6px 12px;
+
+    /* Card visual styling */
+    background-color: rgba(24, 24, 37, 0.85);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+
+    /* Timeout / fade duration */
+    transition-duration: 1.2s;
+}
+
+label {
+    /* Typography */
+    font-family: "JetBrainsMono Nerd Font";
+    font-size: 16px;
+    color: #cdd6f4;
+
+    /* Text shadow / outline */
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.85);
+}
+```
+
 ## Options
 
 ```text
-  -a, --anchor <pos>       Anchor position (bottom-left, bottom, top-right, etc.) [default: bottom-left]
-  -m, --margin <b[,l]>     Margin in pixels: bottom,left or uniform margin [default: 195,4]
-  -w, --width <px>         Max width in pixels (truncates overflow) [default: 185]
-  -t, --timeout <ms>       Fade timeout in milliseconds [default: 1200]
-  -f, --font <font>        Font description [default: JetBrainsMono Nerd Font 16]
-  -c, --color <hex>        Text color in hex (#ffffff) [default: #ffffff]
-  -b, --bg <hex>           Background color (#00000000 for pure transparent) [default: #00000000]
-  -h, --help               Show help message and exit
+  -s, --style <file|css>   GTK CSS stylesheet file path or inline CSS string
+                           [default: ~/.config/wayhud/style.css]
+  -h, --help               Show this help message and exit
   -v, --version            Show version information
+```
+
+## Development
+
+Tools are managed with [mise](https://mise.jdx.dev/) and git hooks/linting with [hk](https://hk.jdx.dev/):
+
+```bash
+# Run linting (clang-format, cppcheck, clang-tidy)
+make lint
+# or: hk check --all
+
+# Auto-fix formatting
+make format
+# or: hk fix --all
 ```
 
 ## License

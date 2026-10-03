@@ -1,12 +1,12 @@
 #include "input.h"
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/input.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
-#include <linux/input.h>
 #include <xkbcommon/xkbcommon.h>
 
 #define BITS_PER_LONG (sizeof(long) * 8)
@@ -14,32 +14,32 @@
 #define OFF(x) ((x) % BITS_PER_LONG)
 #define BIT(x) (1UL << OFF(x))
 #define LONG(x) ((x) / BITS_PER_LONG)
-#define test_bit(bit, array) (((array[LONG(bit)] >> OFF(bit)) & 1))
+#define test_bit(bit, array) ((((array)[LONG(bit)] >> OFF(bit)) & 1))
 
 static const char *clean_key_name(xkb_keysym_t sym, char *buf, size_t buf_size) {
     switch (sym) {
-        case XKB_KEY_Return:
-        case XKB_KEY_KP_Enter:
-            return "Enter";
-        case XKB_KEY_Escape:
-            return "Esc";
-        case XKB_KEY_BackSpace:
-            return "Backspace";
-        case XKB_KEY_Tab:
-        case XKB_KEY_ISO_Left_Tab:
-            return "Tab";
-        case XKB_KEY_space:
-            return "Space";
-        case XKB_KEY_Up:
-            return "↑";
-        case XKB_KEY_Down:
-            return "↓";
-        case XKB_KEY_Left:
-            return "←";
-        case XKB_KEY_Right:
-            return "→";
-        default:
-            break;
+    case XKB_KEY_Return:
+    case XKB_KEY_KP_Enter:
+        return "Enter";
+    case XKB_KEY_Escape:
+        return "Esc";
+    case XKB_KEY_BackSpace:
+        return "Backspace";
+    case XKB_KEY_Tab:
+    case XKB_KEY_ISO_Left_Tab:
+        return "Tab";
+    case XKB_KEY_space:
+        return "Space";
+    case XKB_KEY_Up:
+        return "↑";
+    case XKB_KEY_Down:
+        return "↓";
+    case XKB_KEY_Left:
+        return "←";
+    case XKB_KEY_Right:
+        return "→";
+    default:
+        break;
     }
 
     int len = xkb_keysym_to_utf8(sym, buf, buf_size);

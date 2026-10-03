@@ -1,0 +1,16 @@
+[tools]
+hk = "2.4.0"
+clang-format = "latest"
+"pipx:cppcheck" = "latest"
+"pipx:clang-tidy" = "latest"
+
+[tasks.pre-commit]
+run = "hk run pre-commit"
+
+[tasks.lint]
+description = "Run linter via hk"
+run = "hk check --all"
+
+[tasks.fmt]
+description = "Format files via hk"
+run = "hk fix --all"

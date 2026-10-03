@@ -1,0 +1,14 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-reserved-identifier,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-branch-clone,
+  -bugprone-unchecked-string-to-number-conversion,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.*,
+  performance-*
+WarningsAsErrors: ''
+HeaderFilterRegex: '^((?!build|protocols).)*$'
+...

@@ -1,5 +1,4 @@
+build/
 *.o
 wayhud
 keyhud
-protocols/*-protocol.c
-protocols/*-client-protocol.h

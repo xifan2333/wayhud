@@ -1,0 +1,20 @@
+amends "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Builtins.pkl"
+
+exclude = List("build/**", "protocols/**")
+
+steps {
+    ["clang-format"] = (Builtins.clang_format) {
+        glob = List("src/**/*.c", "src/**/*.h")
+    }
+
+    ["cppcheck"] {
+        glob = List("src/**/*.c")
+        check = "make -s proto 2>/dev/null; cppcheck --enable=warning,style,performance,portability --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=unusedStructMember --suppress=constVariablePointer --suppress=normalCheckLevelMaxBranches --error-exitcode=1 -Isrc -Ibuild -Ibuild/protocols {{files}}"
+    }
+
+    ["clang-tidy"] {
+        glob = List("src/**/*.c")
+        check = "make -s proto 2>/dev/null; clang-tidy {{files}} -- -Isrc -Ibuild -Ibuild/protocols $(pkg-config --cflags wayland-client cairo pango pangocairo xkbcommon)"
+    }
+}

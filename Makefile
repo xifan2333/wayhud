@@ -3,47 +3,77 @@ CFLAGS ?= -O2 -Wall -Wextra
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 
+BUILD_DIR ?= build
+TARGET = wayhud
+BIN = $(BUILD_DIR)/$(TARGET)
+
 WAYLAND_SCANNER ?= $(shell pkg-config --variable=wayland_scanner wayland-scanner 2>/dev/null || echo wayland-scanner)
 PKGS = wayland-client cairo pango pangocairo xkbcommon
 
 PKG_CFLAGS = $(shell pkg-config --cflags $(PKGS))
 PKG_LIBS = $(shell pkg-config --libs $(PKGS)) -lrt
 
-GEN_SOURCES = protocols/wlr-layer-shell-unstable-v1-protocol.c \
-              protocols/xdg-shell-protocol.c
-GEN_HEADERS = protocols/wlr-layer-shell-unstable-v1-client-protocol.h \
-              protocols/xdg-shell-client-protocol.h
+PROTO_XMLS = protocols/wlr-layer-shell-unstable-v1.xml \
+             protocols/xdg-shell.xml
 
-SOURCES = main.c input.c render.c $(GEN_SOURCES)
-OBJECTS = $(SOURCES:.c=.o)
-TARGET = wayhud
+PROTO_HEADERS = $(BUILD_DIR)/protocols/wlr-layer-shell-unstable-v1-client-protocol.h \
+                $(BUILD_DIR)/protocols/xdg-shell-client-protocol.h
+PROTO_SOURCES = $(BUILD_DIR)/protocols/wlr-layer-shell-unstable-v1-protocol.c \
+                $(BUILD_DIR)/protocols/xdg-shell-protocol.c
 
-all: $(TARGET)
+SRC = src/main.c src/input.c src/render.c src/style.c src/filter.c
+OBJ = $(SRC:src/%.c=$(BUILD_DIR)/obj/%.o) \
+      $(PROTO_SOURCES:$(BUILD_DIR)/protocols/%.c=$(BUILD_DIR)/obj/%.o)
 
-protocols/%-client-protocol.h: protocols/%.xml
+INCLUDES = -Isrc -I$(BUILD_DIR) -I$(BUILD_DIR)/protocols
+
+.PRECIOUS: $(PROTO_SOURCES) $(PROTO_HEADERS)
+
+all: $(BIN)
+
+# Wayland protocol generators
+$(BUILD_DIR)/protocols/%-client-protocol.h: protocols/%.xml
+	@mkdir -p $(BUILD_DIR)/protocols
 	$(WAYLAND_SCANNER) client-header $< $@
 
-protocols/%-protocol.c: protocols/%.xml
+$(BUILD_DIR)/protocols/%-protocol.c: protocols/%.xml
+	@mkdir -p $(BUILD_DIR)/protocols
 	$(WAYLAND_SCANNER) private-code $< $@
 
-%.o: %.c $(GEN_HEADERS)
-	$(CC) $(CFLAGS) $(PKG_CFLAGS) -I. -Iprotocols -c $< -o $@
+# Source objects
+$(BUILD_DIR)/obj/%.o: src/%.c $(PROTO_HEADERS)
+	@mkdir -p $(BUILD_DIR)/obj
+	$(CC) $(CFLAGS) $(PKG_CFLAGS) $(INCLUDES) -c $< -o $@
 
-$(TARGET): $(GEN_HEADERS) $(OBJECTS)
-	$(CC) $(CFLAGS) $(OBJECTS) $(PKG_LIBS) -o $@
+# Protocol objects
+$(BUILD_DIR)/obj/%-protocol.o: $(BUILD_DIR)/protocols/%-protocol.c $(PROTO_HEADERS)
+	@mkdir -p $(BUILD_DIR)/obj
+	$(CC) $(CFLAGS) $(PKG_CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BIN): $(PROTO_HEADERS) $(OBJ)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(OBJ) $(PKG_LIBS) -o $@
+
+proto: $(PROTO_HEADERS)
 
 clean:
-	rm -f $(TARGET) $(OBJECTS) $(GEN_SOURCES) $(GEN_HEADERS)
+	rm -rf $(BUILD_DIR)
 
-install: $(TARGET)
+install: $(BIN)
 	install -d $(DESTDIR)$(BINDIR)
-	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -m 755 $(BIN) $(DESTDIR)$(BINDIR)/$(TARGET)
 
-install-suid: $(TARGET)
+install-suid: $(BIN)
 	install -d $(DESTDIR)$(BINDIR)
-	install -m 4755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -m 4755 $(BIN) $(DESTDIR)$(BINDIR)/$(TARGET)
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
 
-.PHONY: all clean install install-suid uninstall
+lint: $(PROTO_HEADERS)
+	hk check --all
+
+format:
+	hk fix --all
+
+.PHONY: all clean install install-suid uninstall lint format proto
