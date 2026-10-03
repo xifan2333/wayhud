@@ -1,5 +1,6 @@
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo "0.3.0")
 CC ?= gcc
-CFLAGS ?= -O2 -Wall -Wextra
+CFLAGS ?= -O2 -Wall -Wextra -DVERSION=\"$(VERSION)\"
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 

@@ -11,6 +11,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifndef VERSION
+#define VERSION "0.3.0"
+#endif
+
 #define MAX_EVENT_SOURCES (MAX_DEVICES + 4)
 
 static volatile sig_atomic_t g_running = 1;
@@ -161,7 +165,8 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
             instance_name = optarg;
             break;
         case 'v':
-            printf("wayhud 0.3.0 (universal suckless Wayland on-screen HUD, GTK CSS styled)\n");
+            printf("wayhud %s (universal suckless Wayland on-screen HUD, GTK CSS styled)\n",
+                   VERSION);
             exit(0);
         case 'h':
         default:

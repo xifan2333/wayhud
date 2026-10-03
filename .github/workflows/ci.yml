@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev libcairo2-dev libpango1.0-dev pkg-config
+
+      - name: Install mise toolchain
+        uses: jdx/mise-action@v2
+
+      - name: Run linter and static checks
+        run: make lint
+
+      - name: Build binary
+        run: make
+
+      - name: Strip binary
+        run: strip build/wayhud
+
+      - name: Verify executable
+        run: ./build/wayhud --version
+
+      - name: Package release artifact
+        run: tar -czf wayhud-linux-x86_64.tar.gz -C build wayhud
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayhud-linux-x86_64
+          path: wayhud-linux-x86_64.tar.gz
+          if-no-files-found: error
