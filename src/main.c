@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #ifndef VERSION
-#define VERSION "0.3.0"
+#define VERSION "0.1.0"
 #endif
 
 #define MAX_EVENT_SOURCES (MAX_DEVICES + 4)
