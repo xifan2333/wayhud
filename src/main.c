@@ -9,10 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef VERSION
-#define VERSION "0.1.0"
+#define VERSION "0.1.1"
 #endif
 
 #define MAX_EVENT_SOURCES (MAX_DEVICES + 4)
@@ -185,7 +186,9 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
         wayhud_style_load_file(&app->style, NULL, instance_name);
     }
 
-    app->has_pipe_in = !isatty(STDIN_FILENO);
+    struct stat in_stat;
+    app->has_pipe_in = (fstat(STDIN_FILENO, &in_stat) == 0 &&
+                        (S_ISFIFO(in_stat.st_mode) || S_ISREG(in_stat.st_mode)));
     app->has_pipe_out = !isatty(STDOUT_FILENO);
 
     signal(SIGINT, on_signal);
