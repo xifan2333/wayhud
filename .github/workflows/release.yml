@@ -72,8 +72,9 @@ jobs:
           archive_dir="wayhud-${version}-x86_64-unknown-linux-gnu"
           archive_name="${archive_dir}.tar.gz"
 
-          mkdir -p "dist/${archive_dir}"
+          mkdir -p "dist/${archive_dir}/man"
           cp build/wayhud "dist/${archive_dir}/"
+          cp man/wayhud.1 "dist/${archive_dir}/man/"
           cp README.md LICENSE "dist/${archive_dir}/"
 
           cd dist

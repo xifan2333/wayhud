@@ -3,6 +3,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -Wall -Wextra -DVERSION=\"$(VERSION)\"
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
+MANDIR ?= $(PREFIX)/share/man
 
 BUILD_DIR ?= build
 TARGET = wayhud
@@ -63,13 +64,18 @@ clean:
 install: $(BIN)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(BIN) $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -d $(DESTDIR)$(MANDIR)/man1
+	install -m 644 man/wayhud.1 $(DESTDIR)$(MANDIR)/man1/wayhud.1
 
 install-suid: $(BIN)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 4755 $(BIN) $(DESTDIR)$(BINDIR)/$(TARGET)
+	install -d $(DESTDIR)$(MANDIR)/man1
+	install -m 644 man/wayhud.1 $(DESTDIR)$(MANDIR)/man1/wayhud.1
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(MANDIR)/man1/wayhud.1
 
 lint: $(PROTO_HEADERS)
 	hk check --all

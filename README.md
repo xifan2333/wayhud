@@ -22,6 +22,8 @@ make
 sudo make install
 ```
 
+This installs the binary and the `wayhud(1)` man page into standard system directories.
+
 If your user is not yet in the `input` group, you can install with the setuid bit:
 ```bash
 sudo make install-suid
@@ -43,7 +45,10 @@ wayhud | grep "Super"
 
 ## GTK CSS Configuration
 
-`wayhud` looks for `~/.config/wayhud/style.css` (or `$XDG_CONFIG_HOME/wayhud/style.css`) by default:
+`wayhud` locates style sheets strictly following the **XDG Base Directory Specification**:
+1. `$XDG_CONFIG_HOME/wayhud/style.css` (defaults to `~/.config/wayhud/style.css`);
+2. Traverses system `$XDG_CONFIG_DIRS/wayhud/style.css` (defaults to `/etc/xdg/wayhud/style.css`);
+3. Seamlessly dereferences **symbolic links** for GNU Stow, chezmoi, and dotfile managers.
 
 ```css
 window {
@@ -79,10 +84,14 @@ label {
 
 ```text
   -s, --style <file|css>   GTK CSS stylesheet file path or inline CSS string
-                           [default: ~/.config/wayhud/style.css]
+                           [default: $XDG_CONFIG_HOME/wayhud/style.css]
+  -n, --name <name>        Instance name matching window#<name> and label#<name>
+                           [default: keys]
   -h, --help               Show this help message and exit
   -v, --version            Show version information
 ```
+
+See `man 1 wayhud` for comprehensive documentation on all supported GTK CSS properties and lifecycle details.
 
 ## Development
 

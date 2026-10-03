@@ -2,9 +2,11 @@
 #include "style.h"
 #include "protocols/wlr-layer-shell-unstable-v1-client-protocol.h"
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_RULES 32
 #define MAX_SELECTOR_LEN 64
@@ -571,22 +573,59 @@ int wayhud_style_parse(wayhud_style_t *style, const char *css_text, const char *
     return 0;
 }
 
+static bool try_path(const char *path, char *out) {
+    return path && path[0] && realpath(path, out) && access(out, R_OK) == 0;
+}
+
+static bool try_fmt_path(char *out, const char *fmt, const char *arg1, const char *arg2) {
+    if (!arg1 || !arg1[0]) return false;
+    char path[PATH_MAX];
+    if (arg2) {
+        snprintf(path, sizeof(path), fmt, arg1, arg2);
+    } else {
+        snprintf(path, sizeof(path), fmt, arg1);
+    }
+    return try_path(path, out);
+}
+
+static bool try_explicit_path(const char *in, char *out) {
+    if (!in || !in[0]) return false;
+    if (in[0] == '~' && in[1] == '/') {
+        return try_fmt_path(out, "%s/%s", getenv("HOME"), in + 2);
+    }
+    return try_path(in, out);
+}
+
+static int resolve_xdg_style_path(const char *explicit_path, char *out) {
+    if (explicit_path) {
+        return try_explicit_path(explicit_path, out) ? 0 : -1;
+    }
+
+    /* 1. Primary: $XDG_CONFIG_HOME/wayhud/style.css */
+    if (try_fmt_path(out, "%s/wayhud/style.css", getenv("XDG_CONFIG_HOME"), NULL)) return 0;
+
+    /* 2. User fallback: $HOME/.config/wayhud/style.css */
+    if (try_fmt_path(out, "%s/.config/wayhud/style.css", getenv("HOME"), NULL)) return 0;
+
+    /* 3. System cascade: $XDG_CONFIG_DIRS (fallback: /etc/xdg) */
+    const char *xdg_dirs = getenv("XDG_CONFIG_DIRS");
+    char dirs_buf[PATH_MAX];
+    snprintf(dirs_buf, sizeof(dirs_buf), "%s", (xdg_dirs && xdg_dirs[0]) ? xdg_dirs : "/etc/xdg");
+
+    char *saveptr = NULL;
+    for (char *dir = strtok_r(dirs_buf, ":", &saveptr); dir; dir = strtok_r(NULL, ":", &saveptr)) {
+        str_trim(dir);
+        if (try_fmt_path(out, "%s/wayhud/style.css", dir, NULL)) return 0;
+    }
+
+    return -1;
+}
+
 int wayhud_style_load_file(wayhud_style_t *style, const char *file_path,
                            const char *instance_name) {
-    char path_buf[1024];
-    const char *target_path = file_path;
-
-    if (!target_path) {
-        const char *xdg = getenv("XDG_CONFIG_HOME");
-        const char *home = getenv("HOME");
-        if (xdg && xdg[0]) {
-            snprintf(path_buf, sizeof(path_buf), "%s/wayhud/style.css", xdg);
-        } else if (home && home[0]) {
-            snprintf(path_buf, sizeof(path_buf), "%s/.config/wayhud/style.css", home);
-        } else {
-            return -1;
-        }
-        target_path = path_buf;
+    char target_path[PATH_MAX];
+    if (resolve_xdg_style_path(file_path, target_path) != 0) {
+        return -1;
     }
 
     FILE *f = fopen(target_path, "re");

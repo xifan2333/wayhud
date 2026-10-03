@@ -1,0 +1,138 @@
+.TH WAYHUD 1 "October 2026" "wayhud 0.1.0" "User Commands"
+.SH NAME
+wayhud \- universal modern suckless Wayland on-screen HUD (GTK CSS styled)
+.SH SYNOPSIS
+.B wayhud
+[\fB\-s\fR \fIstyle\fR]
+[\fB\-n\fR \fIname\fR]
+[\fB\-h\fR]
+[\fB\-v\fR]
+.SH DESCRIPTION
+.B wayhud
+is a minimalist, highly performant On-Screen Display (OSD) and Heads-Up Display (HUD)
+for Wayland compositors supporting the \fBwlr-layer-shell-unstable-v1\fR protocol
+(such as River, Sway, Hyprland, and Niri).
+.PP
+Built with direct \fBlibwayland-client\fR and \fBCairo/Pango\fR rendering,
+\fBwayhud\fR features a binary size under 60KB, consumes less than 8MB memory,
+and starts in under 2ms. It is fully intangible: the input region is kept empty
+so all pointer clicks pass straight through to windows beneath, and keyboard focus
+is never intercepted.
+.SH PIPELINE BEHAVIOR
+.B wayhud
+automatically detects its terminal environment via POSIX \fBisatty\fR(3):
+.TP
+.B Input Pipeline (\fI... | wayhud\fR)
+When standard input is not a terminal, \fBwayhud\fR reads newline-delimited text
+lines and projects each line as a clean, on-screen text frame. Long sentences wrap
+automatically and are aligned according to the stylesheet. When EOF is reached,
+the frame remains on screen for the duration specified by \fBtransition-duration\fR
+before exiting cleanly.
+.TP
+.B Output Pipeline (\fIwayhud | ...\fR)
+When standard output is piped, captured keystroke names are mirrored to stdout.
+.TP
+.B Standalone Keycaster
+When executed directly in a terminal without pipe redirection, \fBwayhud\fR
+reads kernel hardware input devices under \fI/dev/input/event*\fR. Rapid repetitive
+keystrokes are automatically collapsed into a multiplier badge (e.g. \fBBackspace \(mu 4\fR).
+.SH OPTIONS
+.TP
+\fB\-s\fR, \fB\-\-style\fR \fI<file|css>\fR
+Path to a GTK CSS stylesheet file, or an inline CSS string. If omitted,
+\fBwayhud\fR searches for a configuration file according to the XDG Base Directory
+Specification.
+.TP
+\fB\-n\fR, \fB\-\-name\fR \fI<name>\fR
+Instance name used to match specific GTK CSS selectors (e.g. \fBwindow#\fR\fIname\fR
+and \fBlabel#\fR\fIname\fR). Defaults to \fBkeys\fR.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help message and exit.
+.TP
+\fB\-v\fR, \fB\-\-version\fR
+Print version information and exit.
+.SH GTK CSS STYLING
+Appearance, layout, and timing are configured using standard GTK CSS box model rules.
+.SS Window Properties (\fBwindow\fR)
+.TP
+.B margin-top\fR, \fBmargin-bottom\fR, \fBmargin-left\fR, \fBmargin-right\fR, \fBmargin\fR
+Margins in pixels. Margins also determine the Wayland anchor point:
+setting \fBmargin-top\fR anchors to the top edge (centered horizontally unless left/right is given);
+setting \fBmargin-bottom\fR and \fBmargin-left\fR anchors to the bottom-left corner.
+.TP
+.B padding-top\fR, \fBpadding-bottom\fR, \fBpadding-left\fR, \fBpadding-right\fR, \fBpadding\fR
+Inner padding in pixels between the container edges and text.
+.TP
+.B width\fR, \fBmin-width\fR, \fBmax-width\fR
+Dimensions in pixels. If \fBmin-width\fR is specified, the HUD will not shrink below this width
+even when rendering short words, allowing stable centered banners.
+.TP
+.B background-color\fR, \fBbackground\fR
+Background color in hex (\fI#rgb\fR, \fI#rrggbb\fR, \fI#rrggbbaa\fR),
+\fIrgb(...)\fR, \fIrgba(...)\fR, or \fBtransparent\fR.
+.TP
+.B border-radius\fR
+Radius of rounded corners in pixels.
+.TP
+.B border\fR, \fBborder-width\fR, \fBborder-color\fR
+Border line thickness and color (e.g. \fI1px solid rgba(255, 255, 255, 0.2)\fR).
+.TP
+.B transition-duration\fR
+Display dwell and fade timeout in seconds or milliseconds (e.g. \fI1.2s\fR, \fI1200ms\fR).
+Setting this to \fB0\fR enables permanent resident mode (the HUD stays visible until
+new input arrives or the process terminates).
+.SS Label Properties (\fBlabel\fR)
+.TP
+.B color
+Foreground text color.
+.TP
+.B font-family\fR, \fBfont-size\fR, \fBfont-weight\fR, \fBfont\fR
+Typography settings passed to Pango.
+.TP
+.B text-align
+Horizontal text alignment: \fBcenter\fR, \fBleft\fR, or \fBright\fR.
+.TP
+.B text-shadow
+Text outline or shadow following GTK CSS: \fIdx dy [blur] color\fR
+(e.g. \fI0 0 2px rgba(0, 0, 0, 0.85)\fR) or \fBnone\fR.
+.SH CONFIGURATION FILES
+When no stylesheet is explicitly provided, \fBwayhud\fR resolves configuration files
+in the following order:
+.IP 1. 3
+\fB$XDG_CONFIG_HOME/wayhud/style.css\fR (defaults to \fI~/.config/wayhud/style.css\fR)
+.IP 2. 3
+Each directory in \fB$XDG_CONFIG_DIRS/wayhud/style.css\fR (defaults to \fI/etc/xdg/wayhud/style.css\fR)
+.PP
+Symbolic links are resolved via \fBrealpath\fR(3), fully supporting dotfile managers
+such as GNU Stow, chezmoi, and yadm.
+.SH EXAMPLES
+.PP
+Run standalone keyboard visualizer:
+.RS 4
+.B wayhud
+.RE
+.PP
+Display an ephemeral notification from a script:
+.RS 4
+.B echo "Build Complete!" | wayhud
+.RE
+.PP
+Display a live stream title centered below a top panel:
+.RS 4
+.B echo "🔴 Live Coding" | wayhud -n title
+.RE
+.PP
+Pipe streaming speech-to-text transcripts with a centered caption bar:
+.RS 4
+.B whisper-stream | wayhud -n captions
+.RE
+.PP
+Override style inline:
+.RS 4
+.B wayhud -s "window { margin-top: 30px; } label { color: #f38ba8; }"
+.RE
+.SH AUTHORS
+Written by xifan <xifan233@163.com>.
+.SH COPYRIGHT
+MIT License.
