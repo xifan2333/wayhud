@@ -278,6 +278,24 @@ void wayhud_render_destroy(wayhud_render_t *r) {
     if (r->display) wl_display_disconnect(r->display);
 }
 
+void wayhud_render_set_style(wayhud_render_t *r, const wayhud_style_t *style) {
+    r->style = *style;
+    pango_cairo_font_map_set_default(NULL);
+    zwlr_layer_surface_v1_set_anchor(r->layer_surface, style->anchor);
+    zwlr_layer_surface_v1_set_margin(r->layer_surface, style->margin_top, style->margin_right,
+                                     style->margin_bottom, style->margin_left);
+    if (r->visible) {
+        char text[sizeof(r->current_text)];
+        snprintf(text, sizeof(text), "%s", r->current_text);
+        int64_t last_keypress_ms = r->last_keypress_ms;
+        wayhud_render_show_text(r, text);
+        r->last_keypress_ms = last_keypress_ms;
+    } else {
+        wl_surface_commit(r->surface);
+        wl_display_flush(r->display);
+    }
+}
+
 void wayhud_render_show_text(wayhud_render_t *r, const char *text) {
     if (!r->surface || !text || !text[0]) return;
 

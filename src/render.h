@@ -44,6 +44,7 @@ typedef struct {
 int wayhud_render_init(wayhud_render_t *r, const wayhud_style_t *style);
 void wayhud_render_destroy(wayhud_render_t *r);
 void wayhud_render_show_text(wayhud_render_t *r, const char *text);
+void wayhud_render_set_style(wayhud_render_t *r, const wayhud_style_t *style);
 void wayhud_render_tick(wayhud_render_t *r);
 int wayhud_render_get_fd(wayhud_render_t *r);
 void wayhud_render_dispatch(wayhud_render_t *r);

@@ -6,19 +6,22 @@
 #include <errno.h>
 #include <getopt.h>
 #include <grp.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef VERSION
-#define VERSION "0.1.2"
+#define VERSION "0.1.3"
 #endif
 
 #define MAX_EVENT_SOURCES (MAX_DEVICES + 4)
+#define MAX_STYLES 16
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -45,6 +48,15 @@ struct wayhud_app {
     wayhud_input_t input;
     wayhud_multiplier_t multiplier; /* Inline collapse filter for hardware events */
 
+    const char *instance_name;
+    struct {
+        const char *css;
+        char path[PATH_MAX];
+        int watch;
+    } styles[MAX_STYLES];
+    int style_count;
+    int style_fd;
+
     bool has_pipe_in;
     bool has_pipe_out;
     bool stdin_closed;
@@ -60,7 +72,8 @@ static void print_usage(const char *prog) {
         "  - When stdout is piped (wayhud | ...): automatically streams captured keys to stdout.\n"
         "  - When run standalone: captures keyboard hardware and displays on-screen HUD.\n\n"
         "Options:\n"
-        "  -s, --style <file|css>   GTK CSS stylesheet file path or inline CSS string\n"
+        "  -s, --style <file|css>   Stylesheet file or inline CSS; repeat to layer (max 16)\n"
+        "                           Files reload live; later styles override earlier ones\n"
         "                           [default: $XDG_CONFIG_HOME/wayhud/style.css]\n"
         "  -n, --name <name>        Instance name matching window#<name> and label#<name>\n"
         "                           [default: keys]\n"
@@ -142,6 +155,67 @@ static void on_wayland_socket_event(wayhud_app_t *app, int fd, uint32_t revents)
     wayhud_render_dispatch(&app->render);
 }
 
+/* Watch directories, not file inodes: atomic rename must also trigger reload. */
+static int app_load_styles(wayhud_app_t *app, wayhud_style_t *style) {
+    wayhud_style_init_default(style);
+    for (int i = 0; i < app->style_count; i++) {
+        int ret = app->styles[i].css
+                      ? wayhud_style_parse(style, app->styles[i].css, app->instance_name)
+                      : wayhud_style_load_file(style, app->styles[i].path, app->instance_name);
+        if (ret != 0) {
+            fprintf(stderr, "wayhud: cannot load stylesheet: %s\n",
+                    app->styles[i].css ? "inline CSS" : app->styles[i].path);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void on_style_event(wayhud_app_t *app, int fd, uint32_t revents) {
+    (void)revents;
+    char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+    bool changed = false;
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        for (char *p = buf; p < buf + n;) {
+            const struct inotify_event *event = (const struct inotify_event *)p;
+            if (event->mask & IN_Q_OVERFLOW) changed = true;
+            for (int i = 0; i < app->style_count; i++) {
+                if (app->styles[i].css || !event->len) continue;
+                const char *name = strrchr(app->styles[i].path, '/') + 1;
+                if (event->wd == app->styles[i].watch && strcmp(event->name, name) == 0)
+                    changed = true;
+            }
+            p += sizeof(*event) + event->len;
+        }
+    }
+    if (!changed) return;
+    wayhud_style_t style;
+    if (app_load_styles(app, &style) == 0) {
+        app->style = style;
+        wayhud_render_set_style(&app->render, &style);
+    }
+}
+
+static int app_watch_styles(wayhud_app_t *app) {
+    for (int i = 0; i < app->style_count; i++) {
+        if (app->styles[i].css) continue;
+        if (app->style_fd < 0) {
+            app->style_fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+            if (app->style_fd < 0) return -1;
+        }
+        char dir[PATH_MAX];
+        snprintf(dir, sizeof(dir), "%s", app->styles[i].path);
+        char *slash = strrchr(dir, '/');
+        if (slash == dir) slash++;
+        *slash = '\0';
+        app->styles[i].watch = inotify_add_watch(
+            app->style_fd, dir, IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE | IN_MOVED_FROM);
+        if (app->styles[i].watch < 0) return -1;
+    }
+    return 0;
+}
+
 static int drop_privileges(void) {
     uid_t real_uid = getuid();
     gid_t real_gid = getgid();
@@ -181,11 +255,12 @@ static int drop_privileges(void) {
 
 static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
     memset(app, 0, sizeof(*app));
+    app->style_fd = -1;
     wayhud_style_init_default(&app->style);
     wayhud_multiplier_init(&app->multiplier);
 
-    const char *style_arg = NULL;
-    const char *instance_name = "keys";
+    const char *style_args[MAX_STYLES] = {0};
+    app->instance_name = "keys";
 
     static struct option long_opts[] = {{"style", required_argument, NULL, 's'},
                                         {"name", required_argument, NULL, 'n'},
@@ -197,10 +272,14 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
     while ((opt = getopt_long(argc, argv, "s:n:hv", long_opts, NULL)) != -1) {
         switch (opt) {
         case 's':
-            style_arg = optarg;
+            if (app->style_count == MAX_STYLES) {
+                fprintf(stderr, "wayhud: too many stylesheets (maximum %d)\n", MAX_STYLES);
+                return -1;
+            }
+            style_args[app->style_count++] = optarg;
             break;
         case 'n':
-            instance_name = optarg;
+            app->instance_name = optarg;
             break;
         case 'v':
             printf("wayhud %s (universal suckless Wayland on-screen HUD, GTK CSS styled)\n",
@@ -248,15 +327,24 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
     }
 
     /* 4. Load stylesheet as unprivileged user */
-    if (style_arg) {
-        if (strchr(style_arg, '{')) {
-            wayhud_style_parse(&app->style, style_arg, instance_name);
-        } else {
-            wayhud_style_load_file(&app->style, style_arg, instance_name);
-        }
-    } else {
-        wayhud_style_load_file(&app->style, NULL, instance_name);
+    if (app->style_count == 0 && wayhud_style_resolve_path(NULL, app->styles[0].path) == 0) {
+        style_args[app->style_count++] = NULL;
     }
+    for (int i = 0; i < app->style_count; i++) {
+        const char *style_arg = style_args[i];
+        if (!style_arg) continue; /* Default XDG path was already resolved. */
+        if (strchr(style_arg, '{')) {
+            app->styles[i].css = style_arg;
+        } else if (wayhud_style_resolve_path(style_arg, app->styles[i].path) != 0) {
+            fprintf(stderr, "wayhud: cannot resolve stylesheet: %s\n", style_arg);
+            return -1;
+        }
+    }
+    if (app_watch_styles(app) != 0) {
+        fprintf(stderr, "wayhud: cannot watch stylesheets: %s\n", strerror(errno));
+        return -1;
+    }
+    if (app_load_styles(app, &app->style) != 0) return -1;
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -273,6 +361,7 @@ static int app_init(wayhud_app_t *app, int argc, char *argv[]) {
 }
 
 static void app_destroy(wayhud_app_t *app) {
+    if (app->style_fd >= 0) close(app->style_fd);
     if (!app->has_pipe_in) {
         wayhud_input_destroy(&app->input);
     }
@@ -299,6 +388,14 @@ static int app_collect_sources(wayhud_app_t *app, event_source_t *sources) {
     }
 
     /* 3. Evdev hardware devices */
+    if (app->style_fd >= 0) {
+        sources[count++] = (event_source_t){
+            .fd = app->style_fd,
+            .events = POLLIN,
+            .handler = on_style_event,
+        };
+    }
+
     if (!app->has_pipe_in) {
         int in_fds[MAX_DEVICES];
         int n = wayhud_input_poll_fds(&app->input, in_fds, MAX_DEVICES);

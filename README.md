@@ -87,10 +87,30 @@ label {
 }
 ```
 
+Files are watched in process using inotify, including atomic replacement of resolved
+symlink targets. Existing text is redrawn without recreating the layer surface or
+resetting its display timer. Missing/unreadable files during reload leave the last
+loaded style intact; empty files remove that layer’s overrides. Keep target
+directories and symlink destinations stable while running.
+
+Repeat `-s` (up to 16 times) to apply layers in order; later properties win, even
+over instance rules from earlier layers. Inline layers are reapplied on every
+file reload. With any `-s` arguments, include the base stylesheet explicitly:
+
+```bash
+wayhud -s ~/.config/wayhud/style.css -s ~/.local/state/font/wayhud.css
+```
+
+`font-family` preserves comma-separated primary and fallback families for Pango:
+
+```css
+label { font-family: "Liberation Mono", "Sarasa Mono SC", monospace; }
+```
+
 ## Options
 
 ```text
-  -s, --style <file|css>   GTK CSS stylesheet file path or inline CSS string
+  -s, --style <file|css>   Stylesheet file or inline CSS; repeat to layer (max 16)
                            [default: $XDG_CONFIG_HOME/wayhud/style.css]
   -n, --name <name>        Instance name matching window#<name> and label#<name>
                            [default: keys]

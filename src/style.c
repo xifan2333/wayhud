@@ -38,16 +38,6 @@ static void str_trim(char *s) {
     }
 }
 
-static void str_unquote(char *s) {
-    str_trim(s);
-    size_t len = strlen(s);
-    if (len >= 2 && ((s[0] == '"' && s[len - 1] == '"') || (s[0] == '\'' && s[len - 1] == '\''))) {
-        memmove(s, s + 1, len - 2);
-        s[len - 2] = '\0';
-        str_trim(s);
-    }
-}
-
 static void strip_comments(char *s) {
     char *p = s;
     while ((p = strstr(p, "/*")) != NULL) {
@@ -341,11 +331,27 @@ static void handle_lbl_color(wayhud_style_t *st, const char *val) {
 }
 
 static void handle_lbl_font_family(wayhud_style_t *st, const char *val) {
-    char buf[128];
-    snprintf(buf, sizeof(buf), "%s", val);
-    char *comma = strchr(buf, ',');
-    if (comma) *comma = '\0';
-    str_unquote(buf);
+    /* Pango accepts a comma-separated list, without CSS quotes. */
+    char buf[sizeof(st->font_family)];
+    size_t n = 0;
+    char quote = 0;
+    for (; *val; val++) {
+        char c = *val;
+        if (c == '\\' && val[1]) {
+            c = *++val;
+        } else if (quote && c == quote) {
+            quote = 0;
+            continue;
+        } else if (!quote && (c == '\'' || c == '"')) {
+            quote = c;
+            continue;
+        }
+        if (n + 1 >= sizeof(buf)) return;
+        buf[n++] = c;
+    }
+    if (quote) return;
+    buf[n] = '\0';
+    str_trim(buf);
     if (buf[0]) snprintf(st->font_family, sizeof(st->font_family), "%s", buf);
 }
 
@@ -382,12 +388,7 @@ static void handle_lbl_font(wayhud_style_t *st, const char *val) {
     }
     const char *quote = strchr(val, '"');
     if (!quote) quote = strchr(val, '\'');
-    if (quote) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "%s", quote);
-        str_unquote(buf);
-        if (buf[0]) snprintf(st->font_family, sizeof(st->font_family), "%s", buf);
-    }
+    if (quote) handle_lbl_font_family(st, quote);
 }
 
 static void handle_lbl_text_shadow(wayhud_style_t *st, const char *val) {
@@ -596,7 +597,7 @@ static bool try_explicit_path(const char *in, char *out) {
     return try_path(in, out);
 }
 
-static int resolve_xdg_style_path(const char *explicit_path, char *out) {
+int wayhud_style_resolve_path(const char *explicit_path, char *out) {
     if (explicit_path) {
         return try_explicit_path(explicit_path, out) ? 0 : -1;
     }
@@ -624,7 +625,7 @@ static int resolve_xdg_style_path(const char *explicit_path, char *out) {
 int wayhud_style_load_file(wayhud_style_t *style, const char *file_path,
                            const char *instance_name) {
     char target_path[PATH_MAX];
-    if (resolve_xdg_style_path(file_path, target_path) != 0) {
+    if (wayhud_style_resolve_path(file_path, target_path) != 0) {
         return -1;
     }
 
@@ -634,7 +635,7 @@ int wayhud_style_load_file(wayhud_style_t *style, const char *file_path,
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (sz <= 0 || sz > 1024L * 1024L) {
+    if (sz < 0 || sz > 1024L * 1024L) {
         fclose(f);
         return -1;
     }
@@ -646,10 +647,10 @@ int wayhud_style_load_file(wayhud_style_t *style, const char *file_path,
     }
 
     size_t n = fread(buf, 1, (size_t)sz, f);
-    (void)n;
+    bool complete = n == (size_t)sz && !ferror(f);
     fclose(f);
 
-    int ret = wayhud_style_parse(style, buf, instance_name);
+    int ret = complete ? wayhud_style_parse(style, buf, instance_name) : -1;
     free(buf);
     return ret;
 }
