@@ -58,6 +58,10 @@ $(BIN): $(PROTO_HEADERS) $(OBJ)
 
 proto: $(PROTO_HEADERS)
 
+test: $(PROTO_HEADERS)
+	$(CC) $(CFLAGS) $(INCLUDES) tests/style.c src/style.c -o $(BUILD_DIR)/test-style
+	$(BUILD_DIR)/test-style
+
 clean:
 	rm -rf $(BUILD_DIR)
 
@@ -86,4 +90,4 @@ lint: $(PROTO_HEADERS)
 format:
 	hk fix --all
 
-.PHONY: all clean install install-suid install-caps uninstall lint format proto
+.PHONY: all clean install install-suid install-caps uninstall lint format proto test

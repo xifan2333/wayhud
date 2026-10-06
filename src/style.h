@@ -54,7 +54,7 @@ typedef struct {
     int transition_duration_ms;
 
     /* Typography & Text */
-    char font_family[128];
+    char font_family[512];
     int font_size;
     int font_weight; /* 400 = normal, 700 = bold */
     int text_align;  /* 0: left, 1: center, 2: right */
@@ -64,6 +64,8 @@ typedef struct {
 
 void wayhud_style_init_default(wayhud_style_t *style);
 int wayhud_style_parse(wayhud_style_t *style, const char *css_text, const char *instance_name);
+/* out must have room for PATH_MAX bytes. Resolves symlinks to their source. */
+int wayhud_style_resolve_path(const char *file_path, char *out);
 int wayhud_style_load_file(wayhud_style_t *style, const char *file_path, const char *instance_name);
 
 #endif /* WAYHUD_STYLE_H */

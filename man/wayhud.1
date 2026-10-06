@@ -1,4 +1,4 @@
-.TH WAYHUD 1 "October 2026" "wayhud 0.1.2" "User Commands"
+.TH WAYHUD 1 "October 2026" "wayhud 0.1.3" "User Commands"
 .SH NAME
 wayhud \- universal modern suckless Wayland on-screen HUD (GTK CSS styled)
 .SH SYNOPSIS
@@ -41,7 +41,12 @@ keystrokes are automatically collapsed into a multiplier badge (e.g. \fBBackspac
 \fB\-s\fR, \fB\-\-style\fR \fI<file|css>\fR
 Path to a GTK CSS stylesheet file, or an inline CSS string. If omitted,
 \fBwayhud\fR searches for a configuration file according to the XDG Base Directory
-Specification.
+Specification. Repeat up to 16 times to layer styles in order; later properties
+override earlier ones, including instance rules. Files reload automatically using
+inotify, including atomic replacement of resolved symlink targets. Keep their
+directories and symlink destinations stable while running. Reload preserves the
+layer surface, current text and display timer. Unreadable files retain the last
+loaded style; empty files clear that layer. Inline layers are reapplied on reload.
 .TP
 \fB\-n\fR, \fB\-\-name\fR \fI<name>\fR
 Instance name used to match specific GTK CSS selectors (e.g. \fBwindow#\fR\fIname\fR
@@ -88,7 +93,8 @@ new input arrives or the process terminates).
 Foreground text color.
 .TP
 .B font-family\fR, \fBfont-size\fR, \fBfont-weight\fR, \fBfont\fR
-Typography settings passed to Pango.
+Typography settings passed to Pango. Font families may be a comma-separated list
+of primary and fallback families, with optional quotes around each family.
 .TP
 .B text-align
 Horizontal text alignment: \fBcenter\fR, \fBleft\fR, or \fBright\fR.
